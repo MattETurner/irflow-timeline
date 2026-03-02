@@ -15,8 +15,9 @@ const { parseFile, getXLSXSheets } = require("./parser");
 
 // ── Linux workarounds (Ubuntu 24.04+) ─────────────────────────────
 // Ubuntu 24.04 restricts unprivileged user namespaces via AppArmor,
-// which prevents Chromium's sandbox from initialising. Without this
+// which prevents Chromium's sandbox from initializing. Without this
 // flag the renderer process silently fails and the window never shows.
+// Security note: this app loads only local content, so the risk is minimal.
 if (process.platform === "linux") {
   app.commandLine.appendSwitch("no-sandbox");
   // Let Chromium auto-detect Wayland vs X11 (Ubuntu 24.04 defaults to Wayland)
@@ -238,6 +239,14 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, "..", "dist", "index.html"));
   }
 
+  // Fallback: show the window after a timeout even if the renderer is slow
+  const showFallback = setTimeout(() => {
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+      dbg("WINDOW", "ready-to-show did not fire within timeout — forcing show");
+      mainWindow.show();
+    }
+  }, 5000);
+
   mainWindow.once("ready-to-show", () => {
     clearTimeout(showFallback);
     mainWindow.show();
@@ -246,14 +255,6 @@ function createWindow() {
       delete app.pendingFilePath;
     }
   });
-
-  // Fallback: show the window after a timeout even if the renderer is slow
-  const showFallback = setTimeout(() => {
-    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
-      dbg("WINDOW", "ready-to-show did not fire within timeout — forcing show");
-      mainWindow.show();
-    }
-  }, 5000);
 
   mainWindow.webContents.on("did-fail-load", (_event, errorCode, errorDescription) => {
     dbg("WINDOW", "Failed to load", { errorCode, errorDescription });
